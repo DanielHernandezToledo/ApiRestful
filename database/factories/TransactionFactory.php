@@ -20,7 +20,7 @@ class TransactionFactory extends Factory
     {
 
         $vendedor = Seller::whereHas('products')->get()->random();
-        die();
+
         $comprador = User::all()->except($vendedor->id)->random();
 
         return [

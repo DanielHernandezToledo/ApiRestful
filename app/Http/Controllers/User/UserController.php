@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers\User;
 
-use App\Http\Controllers\Controller;
+use App\Http\Controllers\ApiController;
 use App\Models\User;
 use Illuminate\Http\Request;
 
-class UserController extends Controller
+class UserController extends ApiController
 {
     /**
      * Display a listing of the resource.
@@ -17,7 +17,7 @@ class UserController extends Controller
     {
         $usuarios = User::all();
 
-        return response()->json(['data' => $usuarios], 200);
+        return $this->showAll($usuarios);
     }
 
 
@@ -29,7 +29,23 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $campos = $request->all();
+
+        $reglas = [
+            'name' => 'required',
+            'email' => 'required|email|unique:users',
+            'password' => 'required|min:6|confirmed'
+        ];
+
+        $this->validate($request, $reglas);
+
+        $campos['password'] = bcrypt($request->password);
+        $campos['verified'] = User::USUARIO_NO_VERIFICADO;
+        $campos['verification_token'] = User::generarVerificationToken();
+        $campos['admin'] = User::USUARIO_REGULAR;
+
+        $usuario = User::create($campos);
+        return $this->showOne($usuario);
     }
 
     /**
@@ -42,7 +58,7 @@ class UserController extends Controller
     {
         $usuario = User::findOrFail($id);
 
-        return response()->json(['data' => $usuario], 200);
+        return $this->showOne($usuario);
     }
 
 
@@ -55,7 +71,44 @@ class UserController extends Controller
      */
     public function update(Request $request, $id)
     {
-        //
+        $usuario = User::findOrFail($id);
+
+        $reglas = [
+            'email' => 'required|email|unique:users,email,'.$usuario->id,
+            'password' => 'min:6|confirmed',
+            'admin' => 'in:' . User::USUARIO_ASDMINISTRADOR . ',' . User::USUARIO_REGULAR
+        ];
+
+        $this->validate($request, $reglas);
+
+        if($request->has('name')) {
+            $usuario->name = $request->name;
+        }
+
+        if($request->has('email') && $usuario->email != $request->email) {
+                $usuario->verified = User::USUARIO_NO_VERIFICADO;
+                $usuario->verification_token = User::generarVerificationToken();
+                $usuario->email = $request->email;
+        }
+
+        if($request->has('password')) {
+            $usuario->password = bcrypt($request->password);
+        }
+
+        if($request->has('admin')) {
+            if(!$usuario->esVerificado()){
+                return $this->errorResponse('Unicamente los usuarios verificados pueden cambiar su valor de administrador.', 409);
+            }
+            $usuario->admin = $request->admin;
+        }
+
+        if(!$usuario->isDirty()){
+            return $this->errorResponse('Se debe especificar al menos un valor diferente para actualizar', 422);
+        }
+
+        $usuario->save();
+
+        return $this->showOne($usuario);
     }
 
     /**
@@ -66,6 +119,10 @@ class UserController extends Controller
      */
     public function destroy($id)
     {
-        //
+        $usuario = User::findOrFail($id);
+
+        $usuario->delete();
+
+        return $this->showOne($usuario);
     }
 }
